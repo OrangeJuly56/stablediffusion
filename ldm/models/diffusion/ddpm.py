@@ -854,7 +854,9 @@ class LatentDiffusion(DDPM):
                 cond = [cond]
             key = 'c_concat' if self.model.conditioning_key == 'concat' else 'c_crossattn'
             cond = {key: cond}
-
+        device = torch.device('mps')
+        x_noisy, t = x_noisy.to(device), t.to(device)
+        self.model = self.model.to(device)
         x_recon = self.model(x_noisy, t, **cond)
 
         if isinstance(x_recon, tuple) and not return_ids:
@@ -1326,6 +1328,9 @@ class DiffusionWrapper(pl.LightningModule):
                 cc = torch.cat(c_crossattn, 1)
             else:
                 cc = c_crossattn
+            device = torch.device('mps')
+            x, t, cc = x.to(device), t.to(device), cc.to(device)
+            self.diffusion_model = self.diffusion_model.to(device)
             out = self.diffusion_model(x, t, context=cc)
         elif self.conditioning_key == 'hybrid':
             xc = torch.cat([x] + c_concat, dim=1)

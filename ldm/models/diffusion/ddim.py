@@ -15,9 +15,10 @@ class DDIMSampler(object):
         self.schedule = schedule
 
     def register_buffer(self, name, attr):
+
         if type(attr) == torch.Tensor:
             if attr.device != torch.device("cuda"):
-                attr = attr.to(torch.device("cuda"))
+                attr = attr.to(torch.device("mps"))
         setattr(self, name, attr)
 
     def make_schedule(self, ddim_num_steps, ddim_discretize="uniform", ddim_eta=0., verbose=True):
@@ -42,6 +43,9 @@ class DDIMSampler(object):
         ddim_sigmas, ddim_alphas, ddim_alphas_prev = make_ddim_sampling_parameters(alphacums=alphas_cumprod.cpu(),
                                                                                    ddim_timesteps=self.ddim_timesteps,
                                                                                    eta=ddim_eta,verbose=verbose)
+        # ddim_sigmas = torch.cast(ddim_sigmas, tf.float32)
+        # print(ddim_sigmas.dtype)
+        ddim_sigmas = ddim_sigmas.type(torch.FloatTensor)
         self.register_buffer('ddim_sigmas', ddim_sigmas)
         self.register_buffer('ddim_alphas', ddim_alphas)
         self.register_buffer('ddim_alphas_prev', ddim_alphas_prev)
@@ -99,7 +103,8 @@ class DDIMSampler(object):
         C, H, W = shape
         size = (batch_size, C, H, W)
         print(f'Data shape for DDIM sampling is {size}, eta {eta}')
-
+        device = torch.device('mps')
+        conditioning = conditioning.to(device)
         samples, intermediates = self.ddim_sampling(conditioning, size,
                                                     callback=callback,
                                                     img_callback=img_callback,
@@ -130,7 +135,7 @@ class DDIMSampler(object):
         device = self.model.betas.device
         b = shape[0]
         if x_T is None:
-            img = torch.randn(shape, device=device)
+            img = torch.randn(shape, device=torch.device('mps'))
         else:
             img = x_T
 
@@ -159,7 +164,9 @@ class DDIMSampler(object):
             if ucg_schedule is not None:
                 assert len(ucg_schedule) == len(time_range)
                 unconditional_guidance_scale = ucg_schedule[i]
-
+            device = torch.device('mps')
+            
+            img, cond, ts = img.to(device), cond.to(device), ts.to(device)
             outs = self.p_sample_ddim(img, cond, ts, index=index, use_original_steps=ddim_use_original_steps,
                                       quantize_denoised=quantize_denoised, temperature=temperature,
                                       noise_dropout=noise_dropout, score_corrector=score_corrector,
@@ -208,7 +215,8 @@ class DDIMSampler(object):
                     c_in.append(torch.cat([unconditional_conditioning[i], c[i]]))
             else:
                 c_in = torch.cat([unconditional_conditioning, c])
-            model_uncond, model_t = self.model.apply_model(x_in, t_in, c_in).chunk(2)
+            device= torch.device('mps')
+            model_uncond, model_t = self.model.apply_model(x_in, t_in, c_in).chunk(2).to(device)
             model_output = model_uncond + unconditional_guidance_scale * (model_t - model_uncond)
 
         if self.model.parameterization == "v":
