@@ -83,7 +83,11 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
             elif isinstance(layer, SpatialTransformer):
                 x = layer(x, context)
             else:
+                device = th.device('mps')
+                x = x.to(device)
+                layer = layer.to(device)
                 x = layer(x)
+                x= x.to(device)
         return x
 
 
@@ -773,6 +777,9 @@ class UNetModel(nn.Module):
 
         h = x.type(self.dtype)
         for module in self.input_blocks:
+            device = th.device('mps')
+            h,emb,context = h.to(device), emb.to(device), context.to(device)
+            module = module.to(device)
             h = module(h, emb, context)
             hs.append(h)
         h = self.middle_block(h, emb, context)
